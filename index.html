@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Garage Maintenance</title>
+<style>
+body{font-family:-apple-system,sans-serif;background:#f3f4f6;margin:0;color:#111}
+main{max-width:700px;margin:auto;padding:16px 16px 90px}
+h1{font-size:25px}.card{background:white;padding:15px;margin:12px 0;border-radius:14px}
+input,textarea,select{box-sizing:border-box;width:100%;padding:11px;margin:5px 0 10px;font-size:16px;border:1px solid #ccc;border-radius:9px}
+textarea{min-height:70px}
+button{padding:11px 14px;margin:4px;border:0;border-radius:10px;background:#111827;color:white;font-size:15px}
+.gray{background:#ddd;color:#111}.hide{display:none}
+nav{position:fixed;bottom:0;left:0;right:0;background:white;border-top:1px solid #ddd;text-align:center;padding:8px}
+nav button{background:white;color:#111;padding:8px}
+</style>
+</head>
+<body>
+<main>
+<h1>🚗 Garage Maintenance</h1>
+<select id="cars" onchange="changeCar()"></select>
+
+<section id="home">
+<div class="card">
+<h2>当前车辆</h2>
+<div id="summary"></div>
+<button onclick="page('add')">＋ 添加维修/保养</button>
+</div>
+<div id="recent"></div>
+</section>
+
+<section id="add" class="hide">
+<div class="card">
+<h2>添加记录</h2>
+<input id="date" type="date">
+<input id="miles" type="number" placeholder="里程">
+<input id="item" placeholder="维修/保养项目">
+<textarea id="symptom" placeholder="故障现象"></textarea>
+<textarea id="parts" placeholder="更换零件"></textarea>
+<textarea id="notes" placeholder="维修过程 / 备注"></textarea>
+<textarea id="result" placeholder="最终结果"></textarea>
+<input id="pcost" type="number" step=".01" placeholder="零件费用 $">
+<input id="labor" type="number" step=".01" placeholder="人工费用 $">
+<input id="other" type="number" step=".01" placeholder="其他费用 $">
+<button onclick="addRecord()">保存记录</button>
+</div>
+</section>
+
+<section id="records" class="hide">
+<div class="card">
+<h2>维修记录</h2>
+<input id="search" placeholder="搜索关键词" oninput="showRecords()">
+<button class="gray" onclick="printHistory()">打印车辆历史</button>
+</div>
+<div id="recordList"></div>
+</section>
+
+<section id="vehicles" class="hide">
+<div class="card">
+<h2>添加车辆</h2>
+<input id="year" type="number" placeholder="年份">
+<input id="make" placeholder="品牌，例如 Toyota">
+<input id="model" placeholder="车型，例如 Prius v">
+<input id="engine" placeholder="发动机">
+<input id="vmiles" type="number" placeholder="当前里程">
+<button onclick="addCar()">添加车辆</button>
+</div>
+<div id="carList"></div>
+</section>
+
+<section id="params" class="hide">
+<div class="card">
+<h2>常用参数</h2>
+<input id="pname" placeholder="例如：轮胎螺母扭矩">
+<input id="pvalue" placeholder="例如：76 ft-lb">
+<input id="psource" placeholder="来源">
+<button onclick="addParam()">保存参数</button>
+</div>
+<div id="paramList"></div>
+</section>
+
+<section id="backup" class="hide">
+<div class="card">
+<h2>数据备份</h2>
+<p>建议定期导出备份，换手机时可以保留维修资料。</p>
+<button onclick="backup()">导出备份</button>
+</div>
+</section>
+</main>
+
+<nav>
+<button onclick="page('home')">首页</button>
+<button onclick="page('records')">记录</button>
+<button onclick="page('add')">＋添加</button>
+<button onclick="page('params')">参数</button>
+<button onclick="page('vehicles')">车辆</button>
+<button onclick="page('backup')">备份</button>
+</nav>
+
+<script>
+const K="garageMaintenance";
+let db=JSON.parse(localStorage.getItem(K)||'{"vehicles":[],"records":[],"params":[]}');
+let current=localStorage.getItem("currentCar")||"";
+const $=x=>document.getElementById(x);
+const save=()=>localStorage.setItem(K,JSON.stringify(db));
+const uid=()=>Date.now()+Math.random().toString(16).slice(2);
+
+function page(n){
+ document.querySelectorAll("section").forEach(x=>x.classList.add("hide"));
+ $(n).classList.remove("hide");
+ render();
+}
+
+function car(){
+ return db.vehicles.find(x=>x.id==current);
+}
+
+function refreshCars(){
+ $("cars").innerHTML=db.vehicles.length?
+ db.vehicles.map(x=>`<option value="${x.id}">${x.year} ${x.make} ${x.model}</option>`).join(""):
+ '<option>请先添加车辆</option>';
+ if(!car())current=db.vehicles[0]?.id||"";
+ $("cars").value=current;
+}
+
+function changeCar(){
+ current=$("cars").value;
+ localStorage.setItem("currentCar",current);
+ render();
+}
+
+function addCar(){
+ let x={id:uid(),year:$("year").value,make:$("make").value,
+ model:$("model").value,engine:$("engine").value,
+ mileage:+$("vmiles").value||0};
+ if(!x.make&&!x.model)return alert("请填写品牌或车型");
+ db.vehicles.push(x);current=x.id;save();
+ localStorage.setItem("currentCar",current);
+ page("home");
+}
+
+function addRecord(){
+ if(!current)return alert("请先添加车辆");
+ let x={id:uid(),vehicleId:current,date:$("date").value,
+ mileage:+$("miles").value||0,item:$("item").value,
+ symptom:$("symptom").value,parts:$("parts").value,
+ notes:$("notes").value,result:$("result").value,
+ partsCost:+$("pcost").value||0,labor:+$("labor").value||0,
+ other:+$("other").value||0};
+ if(!x.date||!x.item)return alert("请填写日期和项目");
+ x.total=x.partsCost+x.labor+x.other;
+ db.records.push(x);
+ let v=car();
+ if(v&&x.mileage>v.mileage)v.mileage=x.mileage;
+ save();page("home");
+}
+
+function card(x){
+ return `<div class="card">
+ <b>${x.item}</b><br>
+ ${x.date} · ${Number(x.mileage).toLocaleString()} mi
+ <p>${x.symptom||x.parts||x.notes||""}</p>
+ <b>总费用：$${Number(x.total).toFixed(2)}</b><br>
+ <button class="gray" onclick="printRecord('${x.id}')">打印</button>
+ </div>`;
+}
+
+function showRecords(){
+ let q=($("search")?.value||"").toLowerCase();
+ let a=db.records.filter(x=>x.vehicleId==current)
+ .filter(x=>JSON.stringify(x).toLowerCase().includes(q))
+ .sort((a,b)=>b.date.localeCompare(a.date));
+ $("recordList").innerHTML=a.map(card).join("")||'<div class="card">没有记录</div>';
+}
+
+function addParam(){
+ if(!current)return alert("请先添加车辆");
+ db.params.push({id:uid(),vehicleId:current,
+ name:$("pname").value,value:$("pvalue").value,
+ source:$("psource").value});
+ save();render();
+}
+
+function render(){
+ refreshCars();
+ let v=car();
+ $("summary").innerHTML=v?
+ `<b>${v.year} ${v.make} ${v.model}</b><br>${v.engine||""}<br>当前里程：${Number(v.mileage).toLocaleString()} mi`
+ :"还没有车辆，请先添加。";
+
+ let r=db.records.filter(x=>x.vehicleId==current)
+ .sort((a,b)=>b.date.localeCompare(a.date));
+ $("recent").innerHTML="<h3>最近记录</h3>"+r.slice(0,3).map(card).join("");
+
+ $("carList").innerHTML=db.vehicles.map(x=>
+ `<div class="card"><b>${x.year} ${x.make} ${x.model}</b><br>${x.engine||""}<br>${Number(x.mileage).toLocaleString()} mi</div>`).join("");
+
+ $("paramList").innerHTML=db.params.filter(x=>x.vehicleId==current).map(x=>
+ `<div class="card"><b>${x.name}</b><br>${x.value}<br><small>来源：${x.source||"未填写"}</small></div>`).join("");
+
+ showRecords();
+}
+
+function printRecord(i){
+ let x=db.records.find(r=>r.id==i),v=car();
+ if(!x)return;
+ let w=open("","_blank");
+ w.document.write(`<h1>${v.year} ${v.make} ${v.model}</h1>
+ <h2>${x.item}</h2><p>日期：${x.date}</p><p>里程：${x.mileage} mi</p>
+ <p>故障现象：${x.symptom}</p><p>更换零件：${x.parts}</p>
+ <p>维修过程：${x.notes}</p><p>结果：${x.result}</p>
+ <p>零件 $${x.partsCost}　人工 $${x.labor}　其他 $${x.other}</p>
+ <h3>总费用 $${x.total.toFixed(2)}</h3>`);
+ w.document.close();w.print();
+}
+
+function printHistory(){
+ let v=car();if(!v)return;
+ let a=db.records.filter(x=>x.vehicleId==current);
+ let w=open("","_blank");
+ w.document.write(`<h1>${v.year} ${v.make} ${v.model} 维修历史</h1>`+
+ a.map(x=>`<hr><h3>${x.date}　${x.item}</h3><p>${x.mileage} mi</p>
+ <p>${x.notes||x.parts||x.symptom||""}</p><p>费用 $${x.total.toFixed(2)}</p>`).join(""));
+ w.document.close();w.print();
+}
+
+function backup(){
+ let b=new Blob([JSON.stringify(db,null,2)],{type:"application/json"});
+ let a=document.createElement("a");
+ a.href=URL.createObjectURL(b);
+ a.download="garage-maintenance-backup.json";
+ a.click();
+}
+
+$("date").value=new Date().toISOString().slice(0,10);
+render();
+</script>
+</body>
+</html>
